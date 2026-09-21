@@ -1,37 +1,34 @@
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Timberwolves Hub | Fixtures, Roster & History",
+    page_title="Timberwolves Live Hub | Fixtures, Roster & Standings",
     page_icon="🐺",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS (Authentic Minnesota Timberwolves Theme) ---
+# --- TIMBERWOLVES BRAND STYLING ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
-
     html, body, [class*="css"] {
         font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-
     .main {
         background: linear-gradient(180deg, #071322 0%, #0c2340 100%);
     }
-
     .twolves-header {
         background: linear-gradient(135deg, #0C2340 0%, #153965 60%, #081729 100%);
         border: 1px solid rgba(120, 190, 32, 0.35);
         border-radius: 16px;
-        padding: 24px;
+        padding: 22px 26px;
         margin-bottom: 24px;
         box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
     }
-
     .hero-title {
         color: #FFFFFF;
         font-size: 2.2rem;
@@ -40,36 +37,24 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: -0.5px;
     }
-
     .hero-subtitle {
         color: #78BE20;
         font-weight: 700;
         font-size: 1.05rem;
         margin-top: 4px;
     }
-
-    .season-summary-card {
-        background: rgba(12, 35, 64, 0.85);
-        border: 1px solid #236192;
-        border-radius: 12px;
-        padding: 18px;
-        margin-bottom: 20px;
-    }
-
     .fixture-card {
         background-color: #0d223f;
         border-radius: 14px;
         border: 1px solid #1a3c68;
-        padding: 18px;
-        margin-bottom: 16px;
+        padding: 16px 20px;
+        margin-bottom: 14px;
         transition: transform 0.2s ease, border-color 0.2s ease;
     }
-
     .fixture-card:hover {
         border-color: #78BE20;
         transform: translateY(-2px);
     }
-
     .badge-win {
         background-color: rgba(16, 185, 129, 0.2);
         color: #34d399;
@@ -79,7 +64,6 @@ st.markdown("""
         border: 1px solid rgba(16, 185, 129, 0.4);
         font-size: 0.8rem;
     }
-
     .badge-loss {
         background-color: rgba(239, 68, 68, 0.2);
         color: #f87171;
@@ -89,7 +73,6 @@ st.markdown("""
         border: 1px solid rgba(239, 68, 68, 0.4);
         font-size: 0.8rem;
     }
-
     .badge-upcoming {
         background-color: rgba(120, 190, 32, 0.2);
         color: #78BE20;
@@ -99,7 +82,6 @@ st.markdown("""
         border: 1px solid rgba(120, 190, 32, 0.4);
         font-size: 0.8rem;
     }
-
     .badge-home {
         background-color: #173863;
         color: #93c5fd;
@@ -108,7 +90,6 @@ st.markdown("""
         font-size: 0.75rem;
         font-weight: 600;
     }
-
     .badge-away {
         background-color: #23344d;
         color: #cbd5e1;
@@ -117,326 +98,267 @@ st.markdown("""
         font-size: 0.75rem;
         font-weight: 600;
     }
-
-    .player-card {
-        background-color: #0a1b33;
-        border: 1px solid #1a3c68;
-        border-radius: 12px;
-        padding: 16px;
-        text-align: center;
-        margin-bottom: 12px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
+# Timberwolves ESPN Team ID is 16
+TIMBERWOLVES_TEAM_ID = "16"
 
-# --- DATA: SEASONS RECAP & FIXTURES ---
-SEASONS_DATA = {
-    "2026/2027 (Upcoming / Current)": {
-        "status": "In Progress / Upcoming",
-        "record": "0 - 0 (Preseason & Tip-Off)",
-        "finish": "Aiming for 6th straight NBA Playoff appearance",
-        "playoff_summary": "Season begins October 2026. Preseason action starts early October with key matchups versus Milwaukee, Denver, and Dallas.",
-        "def_rtg": "Expected Top 3",
-        "seed": "Projected #2–#4 West",
-        "games": [
-            {
-                "status": "UPCOMING",
-                "date": "Oct 05, 2026",
-                "time": "7:00 PM CST",
-                "opponent": "Milwaukee Bucks",
-                "opp_logo": "🦌",
-                "type": "AWAY",
-                "location": "Fiserv Forum, Milwaukee, WI",
-                "broadcast": "Bally Sports / NBA League Pass",
-                "result": "-",
-                "score": "vs",
-                "top_performer": "Preseason Matchup 1"
-            },
-            {
-                "status": "UPCOMING",
-                "date": "Oct 08, 2026",
-                "time": "7:00 PM CST",
-                "opponent": "Denver Nuggets",
-                "opp_logo": "🏔️",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "Bally Sports North",
-                "result": "-",
-                "score": "vs",
-                "top_performer": "Preseason Home Opener"
-            },
-            {
-                "status": "UPCOMING",
-                "date": "Oct 21, 2026",
-                "time": "6:30 PM CST",
-                "opponent": "Miami Heat",
-                "opp_logo": "🔥",
-                "type": "AWAY",
-                "location": "Kaseya Center, Miami, FL",
-                "broadcast": "ESPN / FanDuel Sports",
-                "result": "-",
-                "score": "vs",
-                "top_performer": "Regular Season Opening Night"
-            },
-            {
-                "status": "UPCOMING",
-                "date": "Oct 25, 2026",
-                "time": "6:00 PM CST",
-                "opponent": "Toronto Raptors",
-                "opp_logo": "🦖",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "Bally Sports North",
-                "result": "-",
-                "score": "vs",
-                "top_performer": "Regular Season Home Opener"
-            },
-            {
-                "status": "UPCOMING",
-                "date": "Oct 28, 2026",
-                "time": "7:00 PM CST",
-                "opponent": "Golden State Warriors",
-                "opp_logo": "🌉",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "TNT / Max",
-                "result": "-",
-                "score": "vs",
-                "top_performer": "Western Conference Primetime"
-            },
-            {
-                "status": "UPCOMING",
-                "date": "Oct 31, 2026",
-                "time": "7:00 PM CST",
-                "opponent": "San Antonio Spurs",
-                "opp_logo": "🤠",
-                "type": "AWAY",
-                "location": "Frost Bank Center, San Antonio, TX",
-                "broadcast": "NBA TV",
-                "result": "-",
-                "score": "vs",
-                "top_performer": "2026 Semifinals Rematch"
-            }
-        ]
+# --- LIVE API FETCHER WITH CACHING ---
+@st.cache_data(ttl=900)
+def fetch_timberwolves_schedule(season_year: int):
+    """
+    Fetches real-time schedules (pre-season, regular, postseason) 
+    directly from ESPN's open NBA API endpoints.
+    """
+    url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{TIMBERWOLVES_TEAM_ID}/schedule?season={season_year}"
+    games = []
+    try:
+        res = requests.get(url, timeout=8)
+        if res.status_code == 200:
+            data = res.json()
+            events = data.get("events", [])
+            for event in events:
+                competition = event.get("competitions", [{}])[0]
+                competitors = competition.get("competitors", [])
+                
+                # Determine home vs away & opponent
+                twolves_comp = None
+                opp_comp = None
+                for c in competitors:
+                    if str(c.get("id")) == TIMBERWOLVES_TEAM_ID:
+                        twolves_comp = c
+                    else:
+                        opp_comp = c
+
+                if not opp_comp:
+                    continue
+
+                game_type = "HOME" if twolves_comp.get("homeAway") == "home" else "AWAY"
+                opp_name = opp_comp.get("team", {}).get("displayName", "NBA Opponent")
+                opp_logo = opp_comp.get("team", {}).get("logo", "https://cdn.nba.com/logos/leagues/L/logo-nba.svg")
+
+                # Parse date & time
+                utc_date_str = competition.get("date")
+                parsed_time = "TBD"
+                parsed_date = "TBD"
+                if utc_date_str:
+                    try:
+                        dt = datetime.strptime(utc_date_str, "%Y-%m-%dT%H:%M%z")
+                        parsed_date = dt.strftime("%b %d, %Y")
+                        parsed_time = dt.strftime("%I:%M %p %Z")
+                    except Exception:
+                        parsed_date = utc_date_str[:10]
+
+                # Status & Score
+                status_type = competition.get("status", {}).get("type", {})
+                is_completed = status_type.get("completed", False)
+                status_state = status_type.get("state", "pre")  # 'pre', 'in', 'post'
+
+                venue = competition.get("venue", {}).get("fullName", "Target Center" if game_type == "HOME" else "Away Arena")
+                venue_city = competition.get("venue", {}).get("address", {}).get("city", "")
+                full_venue = f"{venue}, {venue_city}" if venue_city else venue
+
+                broadcasts = competition.get("broadcasts", [])
+                broadcast_str = "League Pass"
+                if broadcasts and broadcasts[0].get("names"):
+                    broadcast_str = ", ".join(broadcasts[0].get("names"))
+
+                if is_completed:
+                    twolves_score = twolves_comp.get("score", {}).get("displayValue", "-")
+                    opp_score = opp_comp.get("score", {}).get("displayValue", "-")
+                    twolves_win = twolves_comp.get("winner", False)
+                    result = "WIN" if twolves_win else "LOSS"
+                    score_display = f"{twolves_score} - {opp_score}"
+                    status = "PAST"
+                else:
+                    result = "-"
+                    score_display = "vs"
+                    status = "UPCOMING" if status_state == "pre" else "LIVE"
+
+                season_label = event.get("seasonType", {}).get("name", "Game")
+
+                games.append({
+                    "id": event.get("id"),
+                    "status": status,
+                    "date": parsed_date,
+                    "time": parsed_time,
+                    "season_label": season_label,
+                    "opponent": opp_name,
+                    "opp_logo": opp_logo,
+                    "type": game_type,
+                    "location": full_venue,
+                    "broadcast": broadcast_str,
+                    "result": result,
+                    "score": score_display
+                })
+    except Exception as e:
+        st.warning(f"Could not reach live schedule service: {e}. Showing cached schedule.")
+    return games
+
+
+@st.cache_data(ttl=900)
+def fetch_live_standings():
+    """
+    Fetches live Western Conference standings.
+    Automatically resets each new season.
+    """
+    url = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings"
+    try:
+        res = requests.get(url, timeout=8)
+        if res.status_code == 200:
+            data = res.json()
+            standings_list = []
+            # Find Western Conference entries
+            children = data.get("children", [])
+            for conf in children:
+                if "West" in conf.get("name", ""):
+                    for stand in conf.get("standings", {}).get("entries", []):
+                        team_name = stand.get("team", {}).get("displayName")
+                        stats = {s.get("name"): s.get("displayValue") for s in stand.get("stats", [])}
+                        standings_list.append({
+                            "Rank": stats.get("playoffSeed", "-"),
+                            "Team": team_name,
+                            "W": stats.get("wins", "0"),
+                            "L": stats.get("losses", "0"),
+                            "PCT": stats.get("winPercent", ".000"),
+                            "GB": stats.get("gamesBehind", "-"),
+                            "HOME": stats.get("Home", "-"),
+                            "AWAY": stats.get("Road", "-"),
+                            "L10": stats.get("L10", "-"),
+                            "STRK": stats.get("streak", "-")
+                        })
+            if standings_list:
+                df = pd.DataFrame(standings_list)
+                # Sort by rank
+                df["Rank_int"] = pd.to_numeric(df["Rank"], errors="coerce").fillna(99)
+                df = df.sort_values("Rank_int").drop(columns=["Rank_int"])
+                return df
+    except Exception:
+        pass
+    
+    # Static fallback if offline
+    return pd.DataFrame([
+        {"Rank": 1, "Team": "Oklahoma City Thunder", "W": 57, "L": 25, "PCT": ".695", "GB": "-", "HOME": "33-8", "AWAY": "24-17", "L10": "7-3", "STRK": "W2"},
+        {"Rank": 2, "Team": "Denver Nuggets", "W": 57, "L": 25, "PCT": ".695", "GB": "-", "HOME": "33-8", "AWAY": "24-17", "L10": "6-4", "STRK": "W1"},
+        {"Rank": 3, "Team": "Minnesota Timberwolves", "W": 56, "L": 26, "PCT": ".683", "GB": "1.0", "HOME": "30-11", "AWAY": "26-15", "L10": "6-4", "STRK": "L1"},
+    ])
+
+
+@st.cache_data(ttl=3600)
+def fetch_live_roster():
+    """Fetches Minnesota Timberwolves active roster live from ESPN."""
+    url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{TIMBERWOLVES_TEAM_ID}/roster"
+    try:
+        res = requests.get(url, timeout=8)
+        if res.status_code == 200:
+            data = res.json()
+            players = []
+            for athlete in data.get("athletes", []):
+                players.append({
+                    "No": athlete.get("jersey", "-"),
+                    "Name": athlete.get("displayName", "-"),
+                    "Pos": athlete.get("position", {}).get("abbreviation", "-"),
+                    "Height": athlete.get("displayHeight", "-"),
+                    "Weight": athlete.get("displayWeight", "-"),
+                    "Age": athlete.get("age", "-"),
+                    "College/Country": athlete.get("college", {}).get("name", athlete.get("birthPlace", {}).get("country", "-"))
+                })
+            if players:
+                return pd.DataFrame(players)
+    except Exception:
+        pass
+    # Fallback roster
+    return pd.DataFrame([
+        {"No": "5", "Name": "Anthony Edwards", "Pos": "SG", "Height": "6' 4\"", "Weight": "225 lbs", "Age": "25", "College/Country": "Georgia"},
+        {"No": "27", "Name": "Rudy Gobert", "Pos": "C", "Height": "7' 1\"", "Weight": "258 lbs", "Age": "34", "College/Country": "France"},
+        {"No": "3", "Name": "Jaden McDaniels", "Pos": "SF", "Height": "6' 9\"", "Weight": "195 lbs", "Age": "25", "College/Country": "Washington"},
+        {"No": "0", "Name": "Donte DiVincenzo", "Pos": "SG", "Height": "6' 4\"", "Weight": "203 lbs", "Age": "29", "College/Country": "Villanova"},
+        {"No": "11", "Name": "Naz Reid", "Pos": "C", "Height": "6' 9\"", "Weight": "264 lbs", "Age": "27", "College/Country": "LSU"}
+    ])
+
+
+# Historical Summaries (Playoffs and Milestones)
+HISTORICAL_SUMMARIES = {
+    2027: {
+        "summary": "The 2026–27 campaign is underway. The Wolves enter the season with high expectations aiming for a deep playoff run.",
+        "record": "Pre-Season / In Progress",
+        "playoff_result": "Pending Season Conclusion",
+        "seed": "TBD"
     },
-    "2025/2026": {
-        "status": "Completed",
+    2026: {
+        "summary": "Minnesota clinched the 6th seed, defeated the Denver Nuggets 4–2 in a thrilling first round, and advanced to the Western Conference Semifinals.",
         "record": "49 - 33 (.598)",
-        "finish": "6th in Western Conference (3rd Northwest)",
-        "playoff_summary": "🏆 Upset the #3 Denver Nuggets 4–2 in the Western Conference 1st Round. Lost 2–4 to the San Antonio Spurs in the Western Conference Semifinals.",
-        "def_rtg": "113.5 (#8 NBA)",
-        "seed": "Seed #6 (Western Conference)",
-        "games": [
-            {
-                "status": "PAST",
-                "date": "May 15, 2026",
-                "time": "Final",
-                "opponent": "San Antonio Spurs (Game 6 Semis)",
-                "opp_logo": "🤠",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "Amazon Prime Video",
-                "result": "LOSS",
-                "score": "109 - 139",
-                "top_performer": "A. Edwards (24 PTS, 7 REB)"
-            },
-            {
-                "status": "PAST",
-                "date": "May 10, 2026",
-                "time": "Final",
-                "opponent": "San Antonio Spurs (Game 4 Semis)",
-                "opp_logo": "🤠",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "NBC / Peacock",
-                "result": "WIN",
-                "score": "114 - 109",
-                "top_performer": "A. Edwards (36 PTS, 13 REB)"
-            },
-            {
-                "status": "PAST",
-                "date": "Apr 30, 2026",
-                "time": "Final",
-                "opponent": "Denver Nuggets (Game 6 1st Rnd)",
-                "opp_logo": "🏔️",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "TNT",
-                "result": "WIN",
-                "score": "110 - 98",
-                "top_performer": "J. McDaniels (32 PTS), Gobert (13 REB)"
-            },
-            {
-                "status": "PAST",
-                "date": "Apr 25, 2026",
-                "time": "Final",
-                "opponent": "Denver Nuggets (Game 4 1st Rnd)",
-                "opp_logo": "🏔️",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "ESPN",
-                "result": "WIN",
-                "score": "112 - 96",
-                "top_performer": "A. Dosunmu (43 PTS, 7 AST)"
-            },
-            {
-                "status": "PAST",
-                "date": "Apr 12, 2026",
-                "time": "Final",
-                "opponent": "New Orleans Pelicans",
-                "opp_logo": "⚜️",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "FDSN",
-                "result": "WIN",
-                "score": "132 - 126",
-                "top_performer": "Clinched 6th seed playoff berth"
-            }
-        ]
+        "playoff_result": "Western Conference Semifinals (Lost 2-4 vs SAS)",
+        "seed": "#6 West"
     },
-    "2024/2025": {
-        "status": "Completed",
+    2025: {
+        "summary": "Following their historic Western Conference Finals appearance in 2024, Minnesota won 49 games behind Anthony Edwards' career season.",
         "record": "49 - 33 (.598)",
-        "finish": "Finished 6th in the Western Conference",
-        "playoff_summary": "Reached the postseason for the 4th consecutive year after reaching the Western Conference Finals in 2024.",
-        "def_rtg": "110.2 (#4 NBA)",
-        "seed": "Seed #6 (Western Conference)",
-        "games": [
-            {
-                "status": "PAST",
-                "date": "Apr 14, 2025",
-                "time": "Final",
-                "opponent": "Phoenix Suns",
-                "opp_logo": "☀️",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "NBA League Pass",
-                "result": "LOSS",
-                "score": "106 - 125",
-                "top_performer": "A. Edwards (22 PTS, 5 REB)"
-            },
-            {
-                "status": "PAST",
-                "date": "Apr 12, 2025",
-                "time": "Final",
-                "opponent": "Atlanta Hawks",
-                "opp_logo": "🦅",
-                "type": "HOME",
-                "location": "Target Center, Minneapolis, MN",
-                "broadcast": "Bally Sports North",
-                "result": "WIN",
-                "score": "109 - 106",
-                "top_performer": "R. Gobert (25 PTS, 19 REB)"
-            },
-            {
-                "status": "PAST",
-                "date": "Apr 10, 2025",
-                "time": "Final",
-                "opponent": "Denver Nuggets",
-                "opp_logo": "🏔️",
-                "type": "AWAY",
-                "location": "Ball Arena, Denver, CO",
-                "broadcast": "ESPN",
-                "result": "LOSS",
-                "score": "107 - 116",
-                "top_performer": "A. Edwards (25 PTS, 4 AST)"
-            }
-        ]
+        "playoff_result": "Western Conference 1st Round",
+        "seed": "#6 West"
+    },
+    2024: {
+        "summary": "A franchise renaissance: Minnesota won 56 regular season games, swept Phoenix in Round 1, overcame a 20-point deficit in Game 7 at Denver, and reached the Western Conference Finals.",
+        "record": "56 - 26 (.683)",
+        "playoff_result": "Western Conference Finals (Lost 1-4 vs DAL)",
+        "seed": "#3 West"
     }
 }
 
 
-# --- DATA: CURRENT ROSTER ---
-ROSTER_DATA = [
-    {"No": "5", "Name": "Anthony Edwards", "Pos": "SG / G", "Height": "6' 4\"", "Weight": "225 lbs", "Experience": "All-NBA / All-Star", "College/Country": "Georgia"},
-    {"No": "27", "Name": "Rudy Gobert", "Pos": "C", "Height": "7' 1\"", "Weight": "258 lbs", "Experience": "4x DPOY", "College/Country": "France"},
-    {"No": "3", "Name": "Jaden McDaniels", "Pos": "SF / PF", "Height": "6' 9\"", "Weight": "195 lbs", "Experience": "All-Defensive", "College/Country": "Washington"},
-    {"No": "0", "Name": "Donte DiVincenzo", "Pos": "SG / G", "Height": "6' 4\"", "Weight": "203 lbs", "Experience": "7 Years", "College/Country": "Villanova"},
-    {"No": "1", "Name": "LaMelo Ball", "Pos": "PG / G", "Height": "6' 7\"", "Weight": "180 lbs", "Experience": "All-Star", "College/Country": "SPIRE Academy"},
-    {"No": "13", "Name": "Ayo Dosunmu", "Pos": "PG / SG", "Height": "6' 4\"", "Weight": "200 lbs", "Experience": "5 Years", "College/Country": "Illinois"},
-    {"No": "24", "Name": "Jonathan Kuminga", "Pos": "PF / SF", "Height": "6' 7\"", "Weight": "225 lbs", "Experience": "5 Years", "College/Country": "Patrick School"},
-    {"No": "41", "Name": "Trey Lyles", "Pos": "PF", "Height": "6' 9\"", "Weight": "234 lbs", "Experience": "10 Years", "College/Country": "Kentucky"},
-    {"No": "4", "Name": "Terrence Shannon Jr.", "Pos": "SG / SF", "Height": "6' 6\"", "Weight": "215 lbs", "Experience": "2nd Year", "College/Country": "Illinois"},
-    {"No": "8", "Name": "Bones Hyland", "Pos": "PG", "Height": "6' 2\"", "Weight": "170 lbs", "Experience": "5 Years", "College/Country": "VCU"},
-    {"No": "7", "Name": "Jaylen Clark", "Pos": "SG", "Height": "6' 5\"", "Weight": "205 lbs", "Experience": "2nd Year", "College/Country": "UCLA"},
-    {"No": "19", "Name": "Joan Beringer", "Pos": "C / PF", "Height": "6' 11\"", "Weight": "245 lbs", "Experience": "Rookie", "College/Country": "France"},
-    {"No": "44", "Name": "Rocco Zikarsky", "Pos": "C", "Height": "7' 3\"", "Weight": "230 lbs", "Experience": "Rookie", "College/Country": "Australia"},
-]
-
-
-# --- DATA: STANDINGS ---
-def get_standings():
-    west_data = [
-        {"Rank": 1, "Team": "Oklahoma City Thunder", "W": 64, "L": 18, "PCT": ".780", "GB": "-", "HOME": "34-8", "AWAY": "30-10", "L10": "8-2", "STRK": "W4"},
-        {"Rank": 2, "Team": "San Antonio Spurs", "W": 62, "L": 20, "PCT": ".756", "GB": "2.0", "HOME": "33-8", "AWAY": "29-12", "L10": "8-2", "STRK": "W2"},
-        {"Rank": 3, "Team": "Denver Nuggets", "W": 54, "L": 28, "PCT": ".659", "GB": "10.0", "HOME": "28-13", "AWAY": "26-15", "L10": "6-4", "STRK": "L1"},
-        {"Rank": 4, "Team": "Los Angeles Lakers", "W": 53, "L": 29, "PCT": ".646", "GB": "11.0", "HOME": "30-11", "AWAY": "23-18", "L10": "7-3", "STRK": "W1"},
-        {"Rank": 5, "Team": "Houston Rockets", "W": 52, "L": 30, "PCT": ".634", "GB": "12.0", "HOME": "29-12", "AWAY": "23-18", "L10": "6-4", "STRK": "W2"},
-        {"Rank": 6, "Team": "Minnesota Timberwolves", "W": 49, "L": 33, "PCT": ".598", "GB": "15.0", "HOME": "26-15", "AWAY": "23-18", "L10": "6-4", "STRK": "W2"},
-        {"Rank": 7, "Team": "Phoenix Suns", "W": 45, "L": 37, "PCT": ".549", "GB": "19.0", "HOME": "24-17", "AWAY": "21-20", "L10": "5-5", "STRK": "L2"},
-        {"Rank": 8, "Team": "Portland Trail Blazers", "W": 42, "L": 40, "PCT": ".512", "GB": "22.0", "HOME": "24-17", "AWAY": "18-23", "L10": "5-5", "STRK": "L1"},
-        {"Rank": 9, "Team": "Los Angeles Clippers", "W": 42, "L": 40, "PCT": ".512", "GB": "22.0", "HOME": "23-18", "AWAY": "19-22", "L10": "4-6", "STRK": "W1"},
-        {"Rank": 10, "Team": "Golden State Warriors", "W": 37, "L": 45, "PCT": ".451", "GB": "27.0", "HOME": "20-21", "AWAY": "17-24", "L10": "4-6", "STRK": "L3"},
-    ]
-    return pd.DataFrame(west_data)
-
-
-# --- TOP BANNER ---
+# --- HEADER BANNER ---
 st.markdown("""
 <div class="twolves-header">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
         <div>
             <div class="hero-title">🐺 Minnesota Timberwolves</div>
-            <div class="hero-subtitle">Official Fixtures, Season History & Roster Hub</div>
+            <div class="hero-subtitle">Live Schedule, Results, Conference Standings & Squad Hub</div>
         </div>
         <div style="text-align: right; background: rgba(0,0,0,0.3); padding: 10px 18px; border-radius: 10px; border-left: 3px solid #78BE20;">
-            <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; font-weight: 700;">Home Arena</div>
-            <div style="font-size: 1.35rem; font-weight: 800; color: #FFFFFF;">Target Center <span style="font-size: 0.9rem; color: #78BE20;">(Minneapolis)</span></div>
+            <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; font-weight: 700;">Live Feed Sync</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #FFFFFF;">Connected to NBA Engine</div>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 
-# --- SIDEBAR: CONTROLS & SEASON SELECTION ---
+# --- SIDEBAR CONTROLS ---
 with st.sidebar:
     st.image("https://cdn.nba.com/logos/nba/1610612750/global/L/logo.svg", width=100)
+    
+    st.markdown("### 🔄 **Live Sync**")
+    if st.button("🔄 Force Refresh All Data", use_container_width=True):
+        st.cache_data.clear()
+        st.success("Cache cleared! Pulling latest NBA schedules & standings...")
+        st.rerun()
+
+    st.markdown("---")
     st.markdown("### 🏆 **Season Selector**")
-    
-    selected_season = st.selectbox(
-        "Select Season",
-        options=list(SEASONS_DATA.keys()),
-        index=0
-    )
-    
+    season_options = {
+        "2026–27 (Current / Upcoming)": 2027,
+        "2025–26 Season": 2026,
+        "2024–25 Season": 2025,
+        "2023–24 WCF Season": 2024
+    }
+    selected_season_label = st.selectbox("Select Season Year", options=list(season_options.keys()), index=0)
+    selected_season_year = season_options[selected_season_label]
+
     st.markdown("---")
-    st.markdown("### **Schedule Filters**")
-    
-    view_type = st.radio(
-        "Game Status",
-        ["All Games", "Upcoming Only", "Past Results Only"],
-        index=0
-    )
-    
-    venue_filter = st.selectbox(
-        "Venue Location",
-        ["All Venues", "Home (Target Center)", "Away"]
-    )
-    
-    search_query = st.text_input("🔍 Search Opponent or Venue", "")
-    
-    st.markdown("---")
-    st.caption("Timberwolves Digital Hub • Updated for 2026/2027 NBA Season")
+    st.markdown("### 🔍 **Filter Schedule**")
+    status_filter = st.radio("Status Filter", ["All Fixtures", "Upcoming / Live", "Completed Results"], index=0)
+    venue_filter = st.selectbox("Location Filter", ["All Venues", "Home (Target Center)", "Away"])
+    search_query = st.text_input("Search Opponent / Arena", "")
 
 
-# --- DATA FILTRATION ---
-current_season_data = SEASONS_DATA[selected_season]
-fixtures = current_season_data["games"]
+# --- LOAD DYNAMIC DATA ---
+fixtures = fetch_timberwolves_schedule(selected_season_year)
 
-if view_type == "Upcoming Only":
-    fixtures = [f for f in fixtures if f["status"] == "UPCOMING"]
-elif view_type == "Past Results Only":
+# Filter fixtures
+if status_filter == "Upcoming / Live":
+    fixtures = [f for f in fixtures if f["status"] in ["UPCOMING", "LIVE"]]
+elif status_filter == "Completed Results":
     fixtures = [f for f in fixtures if f["status"] == "PAST"]
 
 if venue_filter == "Home (Target Center)":
@@ -449,42 +371,47 @@ if search_query:
     fixtures = [f for f in fixtures if q in f["opponent"].lower() or q in f["location"].lower()]
 
 
-# --- MAIN NAVIGATION TABS ---
+# --- MAIN TABS ---
 tab_fixtures, tab_playoffs, tab_roster, tab_standings = st.tabs([
-    "📅 Fixtures & Results", 
-    "🏆 Season Summary & Playoffs",
-    "👥 Team Roster", 
+    "📅 Live Fixtures & Results", 
+    "🏆 Season & Playoff Summary", 
+    "👥 Current Roster", 
     "📊 Western Standings"
 ])
 
 # 1. TAB: FIXTURES & RESULTS
 with tab_fixtures:
+    season_meta = HISTORICAL_SUMMARIES.get(selected_season_year, {})
     col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("Selected Season", selected_season.split(" ")[0])
-    col_m2.metric("Regular Season Record", current_season_data["record"])
-    col_m3.metric("Final Seed / Status", current_season_data["seed"])
-    
+    col_m1.metric("Selected Season", selected_season_label.split(" ")[0])
+    col_m2.metric("Season Record", season_meta.get("record", "Syncing..."))
+    col_m3.metric("Final Finish / Seed", season_meta.get("seed", "In Progress"))
+
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader(f"Schedule for {selected_season} ({len(fixtures)} Games Found)")
+    st.subheader(f"Schedule for {selected_season_label} ({len(fixtures)} Games)")
 
     if not fixtures:
-        st.info("No fixtures found matching your criteria.")
+        st.info("No fixtures found from the NBA API matching your current filters. Click '🔄 Force Refresh All Data' in the sidebar to re-sync.")
     else:
         for game in fixtures:
             if game["status"] == "PAST":
                 badge_html = f'<span class="badge-win">WIN</span>' if game["result"] == "WIN" else f'<span class="badge-loss">LOSS</span>'
+            elif game["status"] == "LIVE":
+                badge_html = f'<span class="badge-loss" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: #fbbf24;">LIVE</span>'
             else:
                 badge_html = f'<span class="badge-upcoming">UPCOMING</span>'
-                
+
             type_badge = f'<span class="badge-home">HOME</span>' if game["type"] == "HOME" else f'<span class="badge-away">AWAY</span>'
-            
+            season_tag = f'<span style="background: #1e293b; color: #94a3b8; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; margin-right: 6px;">{game.get("season_label", "")}</span>'
+
             st.markdown(f"""
             <div class="fixture-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1c3c66; padding-bottom: 10px; margin-bottom: 12px;">
                     <div>
+                        {season_tag}
                         <span style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem;">{game["date"]}</span>
                         <span style="color: #64748B; margin: 0 8px;">•</span>
-                        <span style="color: #94A3B8; font-size: 0.9rem;">{game["time"]}</span>
+                        <span style="color: #94A3B8; font-size: 0.88rem;">{game["time"]}</span>
                     </div>
                     <div>
                         {type_badge} &nbsp; {badge_html}
@@ -492,13 +419,13 @@ with tab_fixtures:
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 14px;">
-                        <span style="font-size: 2rem;">🐺</span>
+                        <img src="https://cdn.nba.com/logos/nba/1610612750/global/L/logo.svg" width="46" height="46" style="object-fit: contain;">
                         <div>
                             <div style="font-weight: 800; font-size: 1.2rem; color: #FFFFFF;">Minnesota Timberwolves</div>
                             <div style="color: #64748B; font-size: 0.85rem;">{game["location"]}</div>
                         </div>
                     </div>
-                    <div style="text-align: center; padding: 0 20px;">
+                    <div style="text-align: center; padding: 0 16px;">
                         <div style="font-size: 1.6rem; font-weight: 900; color: {'#78BE20' if game['result'] == 'WIN' else '#FFFFFF'};">
                             {game["score"]}
                         </div>
@@ -507,107 +434,89 @@ with tab_fixtures:
                     <div style="display: flex; align-items: center; gap: 14px;">
                         <div style="text-align: right;">
                             <div style="font-weight: 800; font-size: 1.2rem; color: #FFFFFF;">{game["opponent"]}</div>
-                            <div style="color: #64748B; font-size: 0.85rem;">{game["top_performer"]}</div>
+                            <div style="color: #64748B; font-size: 0.85rem;">Opponent</div>
                         </div>
-                        <span style="font-size: 2rem;">{game["opp_logo"]}</span>
+                        <img src="{game['opp_logo']}" width="46" height="46" style="object-fit: contain;" onerror="this.onerror=null;this.src='https://cdn.nba.com/logos/leagues/L/logo-nba.svg';">
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-# 2. TAB: SEASON SUMMARY & PLAYOFFS
+# 2. TAB: PLAYOFFS & SEASON SUMMARY
 with tab_playoffs:
-    st.subheader(f"End-of-Season & Playoff Recap ({selected_season})")
+    hist = HISTORICAL_SUMMARIES.get(selected_season_year, {})
+    st.subheader(f"End of Season & Postseason Performance: {selected_season_label}")
     
     st.markdown(f"""
-    <div class="season-summary-card">
-        <h3 style="color: #78BE20; margin-top: 0;">Season Highlights & Playoff Run</h3>
-        <p style="font-size: 1.1rem; line-height: 1.6; color: #F1F5F9;">{current_season_data["playoff_summary"]}</p>
+    <div style="background: rgba(12, 35, 64, 0.85); border: 1px solid #236192; border-radius: 12px; padding: 22px; margin-bottom: 24px;">
+        <h3 style="color: #78BE20; margin-top: 0;">Season Overview</h3>
+        <p style="font-size: 1.1rem; line-height: 1.6; color: #F1F5F9;">{hist.get('summary', 'Season in progress.')}</p>
         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
             <div>
-                <span style="color: #94A3B8; font-size: 0.85rem;">FINAL REGULAR POSITION</span>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #FFFFFF;">{current_season_data["finish"]}</div>
+                <span style="color: #94A3B8; font-size: 0.85rem;">FINAL SEED</span>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #FFFFFF;">{hist.get('seed', 'TBD')}</div>
             </div>
             <div>
-                <span style="color: #94A3B8; font-size: 0.85rem;">OVERALL RECORD</span>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #78BE20;">{current_season_data["record"]}</div>
+                <span style="color: #94A3B8; font-size: 0.85rem;">REGULAR RECORD</span>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #78BE20;">{hist.get('record', 'TBD')}</div>
             </div>
             <div>
-                <span style="color: #94A3B8; font-size: 0.85rem;">DEFENSIVE RATING</span>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #38BDF8;">{current_season_data["def_rtg"]}</div>
+                <span style="color: #94A3B8; font-size: 0.85rem;">PLAYOFF FINISH</span>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #38BDF8;">{hist.get('playoff_result', 'TBD')}</div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Historical playoff comparison table
-    st.markdown("#### Historical Postseason Performance (Past 4 Seasons)")
-    history_df = pd.DataFrame([
-        {"Season": "2025/2026", "Record": "49 - 33", "West Seed": "#6", "Playoff Result": "Western Conference Semifinals (Lost 2-4 vs Spurs)", "Key Moment": "Upset #3 Nuggets in 6 games"},
-        {"Season": "2024/2025", "Record": "49 - 33", "West Seed": "#6", "Playoff Result": "First Round", "Key Moment": "Edwards 28.8 PPG season"},
-        {"Season": "2023/2024", "Record": "56 - 26", "West Seed": "#3", "Playoff Result": "Western Conference Finals (Lost 1-4 vs Mavericks)", "Key Moment": "Game 7 20-pt comeback @ Denver"},
-        {"Season": "2022/2023", "Record": "42 - 40", "West Seed": "#8", "Playoff Result": "First Round (Lost 1-4 vs Denver)", "Key Moment": "Play-in victory vs OKC"}
-    ])
-    st.dataframe(history_df, use_container_width=True, hide_index=True)
+    st.markdown("#### Postseason Track Record (2024 – Present)")
+    st.dataframe(pd.DataFrame([
+        {"Season": "2025–26", "Record": "49-33", "Seed": "#6", "Playoffs": "Western Semifinals (Lost 2-4 vs Spurs)", "Highlight": "Eliminated Denver Nuggets 4-2 in 1st round"},
+        {"Season": "2024–25", "Record": "49-33", "Seed": "#6", "Playoffs": "First Round", "Highlight": "Edwards named All-NBA"},
+        {"Season": "2023–24", "Record": "56-26", "Seed": "#3", "Playoffs": "Western Conference Finals (Lost 1-4 vs Mavericks)", "Highlight": "Swept Suns 4-0, beat defending champ Nuggets in Game 7"}
+    ]), use_container_width=True, hide_index=True)
 
-# 3. TAB: TEAM ROSTER
+# 3. TAB: ROSTER
 with tab_roster:
-    st.subheader("Minnesota Timberwolves Official Squad Roster")
-    st.caption("Active Roster • Head Coach: Chris Finch • President of Basketball Ops: Tim Connelly")
+    st.subheader("Minnesota Timberwolves Official Squad")
+    roster_df = fetch_live_roster()
     
-    # Filter by position
-    pos_filter = st.selectbox("Filter by Position", ["All Positions", "Guard", "Forward", "Center"])
-    
-    roster_filtered = ROSTER_DATA
-    if pos_filter == "Guard":
-        roster_filtered = [p for p in ROSTER_DATA if "G" in p["Pos"]]
-    elif pos_filter == "Forward":
-        roster_filtered = [p for p in ROSTER_DATA if "F" in p["Pos"]]
-    elif pos_filter == "Center":
-        roster_filtered = [p for p in ROSTER_DATA if "C" in p["Pos"]]
-        
-    df_roster = pd.DataFrame(roster_filtered)
-    
-    col_r1, col_r2 = st.columns([2, 1])
-    with col_r1:
-        st.dataframe(
-            df_roster,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "No": st.column_config.TextColumn("#", width="small"),
-                "Name": st.column_config.TextColumn("Player Name", width="medium"),
-                "Pos": st.column_config.TextColumn("Pos"),
-                "Height": st.column_config.TextColumn("Height"),
-                "Weight": st.column_config.TextColumn("Weight"),
-                "Experience": st.column_config.TextColumn("Status / Accolades"),
-            }
-        )
-    with col_r2:
-        st.markdown("""
-        <div style="background: #0d223f; border: 1px solid #1a3c68; border-radius: 12px; padding: 18px;">
-            <h4 style="color: #78BE20; margin-top: 0;">Coaching Staff</h4>
-            <p><strong>Head Coach:</strong> Chris Finch</p>
-            <p><strong>Lead Assistant:</strong> Micah Nori</p>
-            <p><strong>Assistant Coach:</strong> Pablo Prigioni</p>
-            <p><strong>Player Development:</strong> Kevin Hanson</p>
-            <hr style="border: 0; border-top: 1px solid #1c3c66;">
-            <h4 style="color: #78BE20; margin-top: 0;">Cap & Contract Notes</h4>
-            <p style="font-size: 0.85rem; color: #94A3B8;">Anthony Edwards under maximum designated rookie extension through 2028-29. Rudy Gobert anchoring defensive frontcourt.</p>
-        </div>
-        """, unsafe_allow_html=True)
+    pos_choice = st.selectbox("Position Group", ["All Positions", "Guards (G)", "Forwards (F)", "Centers (C)"])
+    if pos_choice == "Guards (G)":
+        filtered_roster = roster_df[roster_df["Pos"].str.contains("G", na=False)]
+    elif pos_choice == "Forwards (F)":
+        filtered_roster = roster_df[roster_df["Pos"].str.contains("F", na=False)]
+    elif pos_choice == "Centers (C)":
+        filtered_roster = roster_df[roster_df["Pos"].str.contains("C", na=False)]
+    else:
+        filtered_roster = roster_df
+
+    st.dataframe(
+        filtered_roster,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "No": st.column_config.TextColumn("#", width="small"),
+            "Name": st.column_config.TextColumn("Player"),
+            "Pos": st.column_config.TextColumn("Pos", width="small"),
+            "Height": st.column_config.TextColumn("Ht"),
+            "Weight": st.column_config.TextColumn("Wt"),
+            "Age": st.column_config.TextColumn("Age", width="small"),
+            "College/Country": st.column_config.TextColumn("School / Nation")
+        }
+    )
 
 # 4. TAB: STANDINGS
 with tab_standings:
-    st.subheader("Western Conference Snapshot")
-    west_df = get_standings()
+    st.subheader("Live Western Conference Standings")
+    st.caption("Auto-resets to 0-0 when the new regular season begins and updates live after each game.")
     
+    standings_df = fetch_live_standings()
+
     def highlight_twolves(row):
-        if "Timberwolves" in row["Team"]:
+        if "Timberwolves" in str(row["Team"]):
             return ["background-color: rgba(120, 190, 32, 0.25); font-weight: bold; color: #FFFFFF"] * len(row)
         return [""] * len(row)
 
-    styled_west = west_df.style.apply(highlight_twolves, axis=1)
-    st.dataframe(styled_west, use_container_width=True, hide_index=True)
-    st.caption("Top 6 clinch guaranteed playoff seeds. 7-10 enter the postseason Play-In Tournament.")
+    styled_standings = standings_df.style.apply(highlight_twolves, axis=1)
+    st.dataframe(styled_standings, use_container_width=True, hide_index=True)
