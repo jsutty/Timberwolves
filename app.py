@@ -107,10 +107,7 @@ TIMBERWOLVES_TEAM_ID = "16"
 # --- LIVE API FETCHER WITH CACHING ---
 @st.cache_data(ttl=900)
 def fetch_timberwolves_schedule(season_year: int):
-    """
-    Fetches real-time schedules (pre-season, regular, postseason) 
-    directly from ESPN's open NBA API endpoints.
-    """
+    """Fetches real-time schedules directly from ESPN's open NBA API endpoints."""
     url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{TIMBERWOLVES_TEAM_ID}/schedule?season={season_year}"
     games = []
     try:
@@ -121,8 +118,7 @@ def fetch_timberwolves_schedule(season_year: int):
             for event in events:
                 competition = event.get("competitions", [{}])[0]
                 competitors = competition.get("competitors", [])
-                
-                # Determine home vs away & opponent
+
                 twolves_comp = None
                 opp_comp = None
                 for c in competitors:
@@ -138,7 +134,6 @@ def fetch_timberwolves_schedule(season_year: int):
                 opp_name = opp_comp.get("team", {}).get("displayName", "NBA Opponent")
                 opp_logo = opp_comp.get("team", {}).get("logo", "https://cdn.nba.com/logos/leagues/L/logo-nba.svg")
 
-                # Parse date & time
                 utc_date_str = competition.get("date")
                 parsed_time = "TBD"
                 parsed_date = "TBD"
@@ -150,10 +145,9 @@ def fetch_timberwolves_schedule(season_year: int):
                     except Exception:
                         parsed_date = utc_date_str[:10]
 
-                # Status & Score
                 status_type = competition.get("status", {}).get("type", {})
                 is_completed = status_type.get("completed", False)
-                status_state = status_type.get("state", "pre")  # 'pre', 'in', 'post'
+                status_state = status_type.get("state", "pre")
 
                 venue = competition.get("venue", {}).get("fullName", "Target Center" if game_type == "HOME" else "Away Arena")
                 venue_city = competition.get("venue", {}).get("address", {}).get("city", "")
@@ -193,23 +187,19 @@ def fetch_timberwolves_schedule(season_year: int):
                     "score": score_display
                 })
     except Exception as e:
-        st.warning(f"Could not reach live schedule service: {e}. Showing cached schedule.")
+        st.warning(f"Live schedule service unavailable: {e}. Displaying cached fixtures.")
     return games
 
 
 @st.cache_data(ttl=900)
 def fetch_live_standings():
-    """
-    Fetches live Western Conference standings.
-    Automatically resets each new season.
-    """
+    """Fetches live Western Conference standings. Automatically resets when season begins."""
     url = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings"
     try:
         res = requests.get(url, timeout=8)
         if res.status_code == 200:
             data = res.json()
             standings_list = []
-            # Find Western Conference entries
             children = data.get("children", [])
             for conf in children:
                 if "West" in conf.get("name", ""):
@@ -230,14 +220,12 @@ def fetch_live_standings():
                         })
             if standings_list:
                 df = pd.DataFrame(standings_list)
-                # Sort by rank
                 df["Rank_int"] = pd.to_numeric(df["Rank"], errors="coerce").fillna(99)
                 df = df.sort_values("Rank_int").drop(columns=["Rank_int"])
                 return df
     except Exception:
         pass
     
-    # Static fallback if offline
     return pd.DataFrame([
         {"Rank": 1, "Team": "Oklahoma City Thunder", "W": 57, "L": 25, "PCT": ".695", "GB": "-", "HOME": "33-8", "AWAY": "24-17", "L10": "7-3", "STRK": "W2"},
         {"Rank": 2, "Team": "Denver Nuggets", "W": 57, "L": 25, "PCT": ".695", "GB": "-", "HOME": "33-8", "AWAY": "24-17", "L10": "6-4", "STRK": "W1"},
@@ -247,7 +235,7 @@ def fetch_live_standings():
 
 @st.cache_data(ttl=3600)
 def fetch_live_roster():
-    """Fetches Minnesota Timberwolves active roster live from ESPN."""
+    """Fetches Minnesota Timberwolves active squad roster."""
     url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{TIMBERWOLVES_TEAM_ID}/roster"
     try:
         res = requests.get(url, timeout=8)
@@ -268,7 +256,6 @@ def fetch_live_roster():
                 return pd.DataFrame(players)
     except Exception:
         pass
-    # Fallback roster
     return pd.DataFrame([
         {"No": "5", "Name": "Anthony Edwards", "Pos": "SG", "Height": "6' 4\"", "Weight": "225 lbs", "Age": "25", "College/Country": "Georgia"},
         {"No": "27", "Name": "Rudy Gobert", "Pos": "C", "Height": "7' 1\"", "Weight": "258 lbs", "Age": "34", "College/Country": "France"},
@@ -278,7 +265,6 @@ def fetch_live_roster():
     ])
 
 
-# Historical Summaries (Playoffs and Milestones)
 HISTORICAL_SUMMARIES = {
     2027: {
         "summary": "The 2026–27 campaign is underway. The Wolves enter the season with high expectations aiming for a deep playoff run.",
@@ -306,6 +292,9 @@ HISTORICAL_SUMMARIES = {
     }
 }
 
+# --- SESSION STATE INITIALIZATION FOR PAGINATION ---
+if "display_limit" not in st.session_state:
+    st.session_state.display_limit = 6
 
 # --- HEADER BANNER ---
 st.markdown("""
@@ -323,7 +312,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
     st.image("https://cdn.nba.com/logos/nba/1610612750/global/L/logo.svg", width=100)
@@ -331,6 +319,7 @@ with st.sidebar:
     st.markdown("### 🔄 **Live Sync**")
     if st.button("🔄 Force Refresh All Data", use_container_width=True):
         st.cache_data.clear()
+        st.session_state.display_limit = 6
         st.success("Cache cleared! Pulling latest NBA schedules & standings...")
         st.rerun()
 
@@ -345,17 +334,31 @@ with st.sidebar:
     selected_season_label = st.selectbox("Select Season Year", options=list(season_options.keys()), index=0)
     selected_season_year = season_options[selected_season_label]
 
+    # Reset pagination when season changes
+    if "prev_season" not in st.session_state or st.session_state.prev_season != selected_season_year:
+        st.session_state.prev_season = selected_season_year
+        st.session_state.display_limit = 6
+
+    # Fetch games for selected season to populate filters
+    all_season_games = fetch_timberwolves_schedule(selected_season_year)
+
     st.markdown("---")
     st.markdown("### 🔍 **Filter Schedule**")
     status_filter = st.radio("Status Filter", ["All Fixtures", "Upcoming / Live", "Completed Results"], index=0)
     venue_filter = st.selectbox("Location Filter", ["All Venues", "Home (Target Center)", "Away"])
-    search_query = st.text_input("Search Opponent / Arena", "")
+    
+    # MOBILE-FRIENDLY DROPDOWN FOR OPPONENTS
+    opponents_list = sorted(list(set([g["opponent"] for g in all_season_games if g.get("opponent")])))
+    opponent_filter = st.selectbox(
+        "Filter by Opponent",
+        options=["All Opponents"] + opponents_list,
+        index=0,
+        help="Select any team to filter fixtures directly without typing"
+    )
 
+# --- FILTER FIXTURES ---
+fixtures = all_season_games
 
-# --- LOAD DYNAMIC DATA ---
-fixtures = fetch_timberwolves_schedule(selected_season_year)
-
-# Filter fixtures
 if status_filter == "Upcoming / Live":
     fixtures = [f for f in fixtures if f["status"] in ["UPCOMING", "LIVE"]]
 elif status_filter == "Completed Results":
@@ -366,10 +369,10 @@ if venue_filter == "Home (Target Center)":
 elif venue_filter == "Away":
     fixtures = [f for f in fixtures if f["type"] == "AWAY"]
 
-if search_query:
-    q = search_query.lower()
-    fixtures = [f for f in fixtures if q in f["opponent"].lower() or q in f["location"].lower()]
+if opponent_filter != "All Opponents":
+    fixtures = [f for f in fixtures if f["opponent"] == opponent_filter]
 
+total_matching = len(fixtures)
 
 # --- MAIN TABS ---
 tab_fixtures, tab_playoffs, tab_roster, tab_standings = st.tabs([
@@ -388,12 +391,35 @@ with tab_fixtures:
     col_m3.metric("Final Finish / Seed", season_meta.get("seed", "In Progress"))
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader(f"Schedule for {selected_season_label} ({len(fixtures)} Games)")
+    
+    # Fixtures header & control bar
+    f_col1, f_col2 = st.columns([3, 2])
+    with f_col1:
+        current_shown = min(st.session_state.display_limit, total_matching)
+        st.subheader(f"Schedule: Showing {current_shown} of {total_matching} Games")
+    
+    with f_col2:
+        btn_c1, btn_c2, btn_c3 = st.columns(3)
+        with btn_c1:
+            if st.button("➕ Next 6", use_container_width=True, disabled=(st.session_state.display_limit >= total_matching)):
+                st.session_state.display_limit += 6
+                st.rerun()
+        with btn_c2:
+            if st.button("📖 View All", use_container_width=True, disabled=(st.session_state.display_limit >= total_matching)):
+                st.session_state.display_limit = max(total_matching, 6)
+                st.rerun()
+        with btn_c3:
+            if st.button("↩️ Reset (6)", use_container_width=True, disabled=(st.session_state.display_limit <= 6)):
+                st.session_state.display_limit = 6
+                st.rerun()
 
     if not fixtures:
         st.info("No fixtures found from the NBA API matching your current filters. Click '🔄 Force Refresh All Data' in the sidebar to re-sync.")
     else:
-        for game in fixtures:
+        # Slice fixtures based on current display limit
+        displayed_fixtures = fixtures[:st.session_state.display_limit]
+
+        for game in displayed_fixtures:
             if game["status"] == "PAST":
                 badge_html = f'<span class="badge-win">WIN</span>' if game["result"] == "WIN" else f'<span class="badge-loss">LOSS</span>'
             elif game["status"] == "LIVE":
@@ -417,7 +443,7 @@ with tab_fixtures:
                         {type_badge} &nbsp; {badge_html}
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
                     <div style="display: flex; align-items: center; gap: 14px;">
                         <img src="https://cdn.nba.com/logos/nba/1610612750/global/L/logo.svg" width="46" height="46" style="object-fit: contain;">
                         <div>
@@ -441,6 +467,23 @@ with tab_fixtures:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+        # Bottom Pagination bar when more games exist
+        if st.session_state.display_limit < total_matching:
+            st.markdown("<br>", unsafe_allow_html=True)
+            bot_col1, bot_col2, bot_col3 = st.columns([1, 1, 1])
+            with bot_col1:
+                if st.button("➕ Load Next 6 Games", key="bot_next_6", use_container_width=True):
+                    st.session_state.display_limit += 6
+                    st.rerun()
+            with bot_col2:
+                if st.button("📖 Load Full Season Schedule", key="bot_load_all", use_container_width=True):
+                    st.session_state.display_limit = total_matching
+                    st.rerun()
+            with bot_col3:
+                if st.button("↩️ Reset to 6", key="bot_reset", use_container_width=True):
+                    st.session_state.display_limit = 6
+                    st.rerun()
 
 # 2. TAB: PLAYOFFS & SEASON SUMMARY
 with tab_playoffs:
